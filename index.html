@@ -633,29 +633,123 @@
         }
 
         function shareResult() {
-            const shareText = `🎯 Я набрал ${gameState.score} очков в игре "Кликер судьбы"! Попробуй превзойти мой результат!`;
+            const shareText = `🎯 Я набрал ${gameState.score} очков в игре "Кликер судьбы"! Попробуй превзойти мой результат! 🔮`;
             
             if (window.Telegram && window.Telegram.WebApp) {
-                window.Telegram.WebApp.showPopup({
-                    title: 'Поделиться результатом',
-                    message: shareText,
-                    buttons: [
-                        { type: 'default', text: 'Поделиться' },
-                        { type: 'cancel', text: 'Отмена' }
-                    ]
-                });
-            } else if (navigator.share) {
+                // Используем правильный метод для отправки сообщения через Telegram Web App
+                try {
+                    // Метод 1: Прямая отправка сообщения (если доступно)
+                    if (window.Telegram.WebApp.sendData) {
+                        window.Telegram.WebApp.sendData(JSON.stringify({
+                            action: 'share_result',
+                            text: shareText,
+                            score: gameState.score
+                        }));
+                    } 
+                    // Метод 2: Открытие диалога отправки
+                    else if (window.Telegram.WebApp.openTelegramLink) {
+                        const encodedText = encodeURIComponent(shareText);
+                        window.Telegram.WebApp.openTelegramLink(`https://t.me/share/url?url=${window.location.href}&text=${encodedText}`);
+                    }
+                    // Метод 3: Показать popup с текстом для копирования
+                    else {
+                        window.Telegram.WebApp.showPopup({
+                            title: 'Поделиться результатом',
+                            message: `Скопируйте и отправьте друзьям:\n\n${shareText}`,
+                            buttons: [
+                                { id: 'copy', type: 'default', text: 'Скопировать' },
+                                { type: 'cancel', text: 'Закрыть' }
+                            ]
+                        }, (buttonId) => {
+                            if (buttonId === 'copy') {
+                                copyToClipboard(shareText);
+                            }
+                        });
+                    }
+                } catch (error) {
+                    // Fallback для ошибок
+                    copyToClipboard(shareText);
+                }
+            } 
+            // Для обычных браузеров с Web Share API
+            else if (navigator.share) {
                 navigator.share({
                     title: 'Кликер судьбы',
                     text: shareText,
                     url: window.location.href
+                }).catch(() => {
+                    copyToClipboard(shareText);
                 });
-            } else {
-                // Fallback для копирования в буфер
-                navigator.clipboard.writeText(shareText + ' ' + window.location.href)
-                    .then(() => alert('Результат скопирован в буфер обмена!'))
-                    .catch(() => alert('Не удалось скопировать. Ваш результат: ' + gameState.score));
+            } 
+            // Fallback для всех остальных случаев
+            else {
+                copyToClipboard(shareText);
             }
+        }
+
+        function copyToClipboard(text) {
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(text)
+                    .then(() => {
+                        showNotification('Результат скопирован в буфер обмена! 📋');
+                    })
+                    .catch(() => {
+                        fallbackCopy(text);
+                    });
+            } else {
+                fallbackCopy(text);
+            }
+        }
+
+        function fallbackCopy(text) {
+            // Создаем временное текстовое поле для копирования
+            const textArea = document.createElement('textarea');
+            textArea.value = text;
+            textArea.style.position = 'fixed';
+            textArea.style.left = '-999999px';
+            textArea.style.top = '-999999px';
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            
+            try {
+                document.execCommand('copy');
+                showNotification('Результат скопирован! 📋');
+            } catch (err) {
+                showNotification(`Ваш результат: ${gameState.score} очков! 🎯`);
+            }
+            
+            document.body.removeChild(textArea);
+        }
+
+        function showNotification(message) {
+            const notification = document.createElement('div');
+            notification.style.cssText = `
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                background: rgba(0, 0, 0, 0.9);
+                color: white;
+                padding: 15px 25px;
+                border-radius: 10px;
+                font-size: 16px;
+                z-index: 1001;
+                backdrop-filter: blur(10px);
+                animation: popupAppear 0.3s ease-out;
+            `;
+            notification.textContent = message;
+            
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.style.animation = 'popupDisappear 0.3s ease-in forwards';
+                setTimeout(() => {
+                    if (notification.parentNode) {
+                        notification.parentNode.removeChild(notification);
+                    }
+                }, 300);
+            }, 2000);
         }
 
         // Telegram Web App инициализация
